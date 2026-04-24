@@ -1,0 +1,31 @@
+<policies>
+    <inbound>
+        <base />
+        <authentication-managed-identity resource="https://servicebus.azure.net" output-token-variable-name="msi-access-token" />
+        <set-header name="Authorization" exists-action="override">
+            <value>@((string)context.Variables["msi-access-token"])</value>
+        </set-header>
+        <set-method>POST</set-method>
+        <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+        </set-header>
+        <set-backend-service base-url="https://service-bus-dev-1.servicebus.windows.net" />
+        <rewrite-uri template="/new-course-creation/messages" />
+        <set-header name="BrokerProperties" exists-action="override">
+            <value>@{
+                var json = new JObject();
+                json.Add("SessionId", "order-123");
+                return json.ToString(Newtonsoft.Json.Formatting.None);
+            }</value>
+        </set-header>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

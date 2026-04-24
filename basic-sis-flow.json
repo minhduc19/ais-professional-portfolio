@@ -1,0 +1,212 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Recurrence": {
+                "type": "Recurrence",
+                "recurrence": {
+                    "interval": 1,
+                    "frequency": "Day",
+                    "timeZone": "GMT Standard Time",
+                    "schedule": {
+                        "hours": [
+                            9
+                        ],
+                        "minutes": [
+                            30
+                        ]
+                    },
+                    "startTime": "2026-06-06"
+                }
+            }
+        },
+        "actions": {
+            "Get_rows_(V2)": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['sql']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/tables/@{encodeURIComponent(encodeURIComponent('[dbo].[Courses]'))}/items"
+                },
+                "runAfter": {
+                    "Initialize_variables": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Condition": {
+                "type": "If",
+                "expression": {
+                    "and": [
+                        {
+                            "greater": [
+                                "@variables('countRow')",
+                                0
+                            ]
+                        }
+                    ]
+                },
+                "actions": {
+                    "Create_CSV_table": {
+                        "type": "Table",
+                        "inputs": {
+                            "from": "@body('Get_rows_(V2)')?['value']",
+                            "format": "CSV",
+                            "columns": [
+                                {
+                                    "header": "course_id",
+                                    "value": "@{item()?['Course_id']}"
+                                },
+                                {
+                                    "header": "course_name",
+                                    "value": "@{item()?['Course_Name']}"
+                                },
+                                {
+                                    "header": "external_course_key",
+                                    "value": "@item()?['External_Course_Key']"
+                                },
+                                {
+                                    "header": "term_key",
+                                    "value": "@item()?['Term_key']"
+                                }
+                            ]
+                        }
+                    },
+                    "Compose": {
+                        "type": "Compose",
+                        "inputs": "@replace(body('Create_CSV_table'),',','|')",
+                        "runAfter": {
+                            "Create_CSV_table": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Send_an_email_(V2)": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['outlook-1']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "To": "minhduc.xd.93@gmail.com",
+                                "Subject": "file",
+                                "Body": "<p class=\"editor-paragraph\"><br></p>",
+                                "Attachments": [
+                                    {
+                                        "Name": "attachment.txt",
+                                        "ContentBytes": "@base64(outputs('Compose'))"
+                                    }
+                                ]
+                            },
+                            "path": "/v2/Mail"
+                        },
+                        "runAfter": {
+                            "Compose": [
+                                "Succeeded"
+                            ]
+                        }
+                    }
+                },
+                "else": {
+                    "actions": {
+                        "Send_error_email": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['outlook-1']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "To": "minhduc.xd.93@gmail.com",
+                                    "Subject": "file",
+                                    "Body": "<p class=\"editor-paragraph\">Empty file</p>"
+                                },
+                                "path": "/v2/Mail"
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Get_rows_(V2)": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Execute_a_SQL_query_(V2)": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['sql-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "query": "select count(*) countRow from Courses"
+                    },
+                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/query/sql"
+                },
+                "runAfter": {}
+            },
+            "Initialize_variables": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "countRow",
+                            "type": "integer",
+                            "value": "@body('Execute_a_SQL_query_(V2)')?['resultsets']?['Table1'][0]['countRow']"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Execute_a_SQL_query_(V2)": [
+                        "Succeeded"
+                    ]
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "sql": {
+                    "id": "/subscriptions/8b1b1816-8ecd-4fae-827e-e25b56c59f62/providers/Microsoft.Web/locations/uksouth/managedApis/sql",
+                    "connectionId": "/subscriptions/8b1b1816-8ecd-4fae-827e-e25b56c59f62/resourceGroups/rg-azure-learning/providers/Microsoft.Web/connections/sql",
+                    "connectionName": "sql",
+                    "connectionProperties": {}
+                },
+                "outlook-1": {
+                    "id": "/subscriptions/8b1b1816-8ecd-4fae-827e-e25b56c59f62/providers/Microsoft.Web/locations/uksouth/managedApis/outlook",
+                    "connectionId": "/subscriptions/8b1b1816-8ecd-4fae-827e-e25b56c59f62/resourceGroups/rg-azure-learning/providers/Microsoft.Web/connections/outlook-1",
+                    "connectionName": "outlook-1",
+                    "connectionProperties": {}
+                },
+                "sql-1": {
+                    "id": "/subscriptions/8b1b1816-8ecd-4fae-827e-e25b56c59f62/providers/Microsoft.Web/locations/uksouth/managedApis/sql",
+                    "connectionId": "/subscriptions/8b1b1816-8ecd-4fae-827e-e25b56c59f62/resourceGroups/rg-azure-learning/providers/Microsoft.Web/connections/sql",
+                    "connectionName": "sql",
+                    "connectionProperties": {}
+                }
+            }
+        }
+    }
+}
